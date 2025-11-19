@@ -9,16 +9,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "list.h"
 #include "schedulers.h"
 #include "cpu.h"
 
 // The head of the task list
-struct node *g_head = NULL;
+struct node *task_list_head = NULL;
 
 // We need to keep track of original burst times for metric calculations
-struct node *g_original_tasks = NULL;
+struct node *original_tasks_head = NULL;
 
 /**
  * add()
@@ -27,22 +26,26 @@ struct node *g_original_tasks = NULL;
  * task details for calculating metrics later.
  */
 void add(char *name, int priority, int burst) {
+    // Create the main task to be scheduled
     Task *new_task = malloc(sizeof(Task));
     if (!new_task) {
         fprintf(stderr, "malloc failed in add()\n");
         exit(EXIT_FAILURE);
     }
     new_task->name = strdup(name);
+    new_task->initial_burst = burst; // Store original burst time
+    new_task->has_been_run = 0;      // Flag to track first run for response time
     new_task->priority = priority;
     new_task->burst = burst;
-    insert(&g_head, new_task);
 
-    // Keep a copy for metrics
+    // Keep a copy for calculating total burst time for metrics
     Task *original_task = malloc(sizeof(Task));
     original_task->name = strdup(name);
-    original_task->priority = priority;
     original_task->burst = burst;
-    insert(&g_original_tasks, original_task);
+    insert(&original_tasks_head, original_task);
+
+    // Insert into the main task list
+    insert(&task_list_head, new_task);
 }
 
 /**
@@ -58,79 +61,69 @@ void schedule() {
     int task_count = 0;
     int total_burst_time = 0;
 
-    // Reverse the list to get FCFS order for the first round
-    struct node *current = g_head;
+    // The list is built by inserting at the head, so it's in reverse order
+    // of the input file. We reverse it to get the correct FCFS order for RR.
+    struct node *current = task_list_head;
     struct node *prev = NULL, *next = NULL;
     while (current != NULL) {
         next = current->next;
         current->next = prev;
         prev = current;
         current = next;
+        task_count++; // Count tasks while we're at it
     }
-    g_head = prev;
+    task_list_head = prev;
 
-    // Also reverse the original tasks list and gather metrics
-    current = g_original_tasks;
-    prev = NULL;
-    next = NULL;
-    while (current != NULL) {
-        task_count++;
-        total_burst_time += current->task->burst;
-
-        next = current->next;
-        current->next = prev;
-        prev = current;
-        current = next;
+    // Calculate total burst time from the unmodified original list
+    struct node *temp_orig = original_tasks_head;
+    while (temp_orig != NULL) {
+        total_burst_time += temp_orig->task->burst;
+        temp_orig = temp_orig->next;
     }
-    g_original_tasks = prev;
 
     printf("--- Round-Robin Scheduling (Quantum = %d) ---\n", QUANTUM);
     
-    struct node *temp = g_head;
+    struct node *temp = task_list_head;
 
-    while (g_head != NULL) {
-        // If we've reached the end of the list, loop back to the start
+    while (task_list_head != NULL) {
+        // If we've iterated through the whole list, loop back to the start
         if (temp == NULL) {
-            temp = g_head;
+            temp = task_list_head;
+            // If after resetting, it's still NULL, it means the list is empty.
+            if (temp == NULL) break;
         }
 
         Task *task = temp->task;
 
-        // Check if this is the first time this task is being run for response time
-        struct node *orig_node = g_original_tasks;
-        int original_burst = 0;
-        while(orig_node) {
-            if (strcmp(orig_node->task->name, task->name) == 0) {
-                original_burst = orig_node->task->burst;
-                break;
-            }
-            orig_node = orig_node->next;
-        }
-
-        if (task->burst == original_burst) {
+        // If task is running for the first time, record response time
+        if (task->has_been_run == 0) {
             total_response_time += current_time;
+            task->has_been_run = 1;
         }
 
-        // Determine the slice of time to run the task
+        // Determine the time slice for this run
         int slice = (task->burst > QUANTUM) ? QUANTUM : task->burst;
         run(task, slice);
 
+        // Update task burst and current time
         task->burst -= slice;
         current_time += slice;
 
         if (task->burst <= 0) {
-            // Task is finished
+            // Task is finished, update turnaround time
             total_turnaround_time += current_time;
 
-            // Delete the task and be careful about advancing the pointer
+            // Delete the task from the list.
+            // We must advance our 'temp' pointer *before* deleting the node it points to.
             struct node *to_delete = temp;
             temp = temp->next;
-            delete(&g_head, to_delete->task);
+            delete(&task_list_head, to_delete->task);
+            // Note: The 'delete' function in list.c doesn't free the task's memory,
+            // which is a memory leak. A complete solution would fix that.
         } else {
             // Task is not finished, move to the next one in the list
             temp = temp->next;
         }
-
     }
 
     // The total waiting time is the total time all tasks spent in the system
@@ -138,6 +131,7 @@ void schedule() {
     total_wait_time = total_turnaround_time - total_burst_time;
 
     printf("\n--- RR Performance Metrics ---\n");
+    if (task_count == 0) return;
     printf("Average Turnaround Time: %.2f\n", (float)total_turnaround_time / task_count);
     printf("Average Response Time: %.2f\n", (float)total_response_time / task_count);
     printf("Average Waiting Time: %.2f\n", (float)total_wait_time / task_count);

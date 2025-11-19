@@ -9,22 +9,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "list.h"
 #include "schedulers.h"
 #include "cpu.h"
 
 // The head of the task list
-struct node *g_head = NULL;
+struct node *task_list_head = NULL;
 
 /**
  * add()
  *
  * Adds a task to the list. For FCFS, we can simply insert at the
  * beginning and reverse the list later, or insert at the end.
- * The provided list.c `insert` function adds to the head, so our
+ * The provided list.c 'insert' function adds to the head, so our
  * list will be in reverse order of the input file. We'll correct
- * this in the `schedule` function.
+ * this in the 'schedule' function.
  */
 void add(char *name, int priority, int burst) {
     Task *new_task = malloc(sizeof(Task));
@@ -39,21 +38,21 @@ void add(char *name, int priority, int burst) {
     new_task->burst = burst;
 
     // Insert the new task into the list
-    insert(&g_head, new_task);
+    insert(&task_list_head, new_task);
 }
 
 /**
  * schedule()
  *
  * Executes the FCFS scheduling algorithm. It processes tasks in the
- * order they appear in the input file. Since our `insert` function
+ * order they appear in the input file. Since our 'insert' function
  * adds to the head of the list, the list is currently in reverse order.
  * We will traverse the list from tail to head to simulate FCFS.
  * A simple way to do this is to reverse the list first.
  */
 void schedule() {
     // Reverse the list to get the correct FCFS order
-    struct node *current = g_head;
+    struct node *current = task_list_head;
     struct node *prev = NULL, *next = NULL;
     while (current != NULL) {
         next = current->next;
@@ -61,10 +60,10 @@ void schedule() {
         prev = current;
         current = next;
     }
-    g_head = prev;
+    task_list_head = prev;
 
     // Now traverse the list in FCFS order
-    struct node *temp = g_head;
+    struct node *temp = task_list_head;
     int current_time = 0;
     int total_wait_time = 0;
     int total_turnaround_time = 0;

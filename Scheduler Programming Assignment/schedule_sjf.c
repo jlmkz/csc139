@@ -9,13 +9,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "list.h"
 #include "schedulers.h"
 #include "cpu.h"
 
 // The head of the task list
-struct node *g_head = NULL;
+struct node *task_list_head = NULL;
 
 /**
  * add()
@@ -33,7 +32,7 @@ void add(char *name, int priority, int burst) {
     new_task->priority = priority;
     new_task->burst = burst;
 
-    insert(&g_head, new_task);
+    insert(&task_list_head, new_task);
 }
 
 /**
@@ -42,11 +41,11 @@ void add(char *name, int priority, int burst) {
  * Finds and returns the task with the shortest burst time.
  */
 Task *pickNextTask() {
-    if (g_head == NULL) {
+    if (task_list_head == NULL) {
         return NULL;
     }
 
-    struct node *temp = g_head;
+    struct node *temp = task_list_head;
     Task *shortest_job = temp->task;
 
     while (temp != NULL) {
@@ -74,13 +73,13 @@ void schedule() {
     printf("--- SJF Scheduling ---\n");
 
     // Count initial tasks
-    struct node *counter = g_head;
+    struct node *counter = task_list_head;
     while(counter != NULL) {
         task_count++;
         counter = counter->next;
     }
 
-    while (g_head != NULL) {
+    while (task_list_head != NULL) {
         Task *task = pickNextTask();
         run(task, task->burst);
 
@@ -89,7 +88,7 @@ void schedule() {
         current_time += task->burst;
         total_turnaround_time += current_time;
 
-        delete(&g_head, task);
+        delete(&task_list_head, task);
     }
 
     printf("\n--- SJF Performance Metrics ---\n");

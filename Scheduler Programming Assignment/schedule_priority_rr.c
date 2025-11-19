@@ -9,16 +9,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "list.h"
 #include "schedulers.h"
 #include "cpu.h"
 
 // The head of the task list
-struct node *g_head = NULL;
+struct node *task_list_head = NULL;
 
 // We need a separate list to keep track of original task details for metrics
-struct node *g_original_tasks = NULL;
+struct node *original_tasks_head = NULL;
 
 
 /**
@@ -37,14 +36,14 @@ void add(char *name, int priority, int burst) {
     new_task->priority = priority;
     new_task->burst = burst;
 
-    insert(&g_head, new_task);
+    insert(&task_list_head, new_task);
 
     // Keep a copy for metrics. This list will not be modified.
     Task *original_task = malloc(sizeof(Task));
     original_task->name = strdup(name);
     original_task->priority = priority;
     original_task->burst = burst;
-    insert(&g_original_tasks, original_task);
+    insert(&original_tasks_head, original_task);
 }
 
 /**
@@ -64,8 +63,8 @@ void schedule() {
 
     // Reverse the original tasks list to easily find original burst times
     // and to count tasks. The order of this list doesn't matter, but reversing
-    // makes it consistent with the initial order of g_head if we were to reverse that.
-    struct node *temp_orig = g_original_tasks;
+    // makes it consistent with the initial order of task_list_head if we were to reverse that.
+    struct node *temp_orig = original_tasks_head;
     struct node *prev = NULL, *next = NULL;
     while (temp_orig != NULL) {
         task_count++;
@@ -75,13 +74,13 @@ void schedule() {
         prev = temp_orig;
         temp_orig = next;
     }
-    g_original_tasks = prev;
+    original_tasks_head = prev;
 
 
-    while (g_head != NULL) {
+    while (task_list_head != NULL) {
         // 1. Find the highest priority level among remaining tasks
         int highest_priority = -1;
-        struct node *temp = g_head;
+        struct node *temp = task_list_head;
         while (temp != NULL) {
             if (temp->task->priority > highest_priority) {
                 highest_priority = temp->task->priority;
@@ -93,14 +92,14 @@ void schedule() {
         int tasks_at_priority_level = 1; // sentinel to start the loop
         while (tasks_at_priority_level > 0) {
             tasks_at_priority_level = 0;
-            temp = g_head; // Start scan from the beginning of the main list
+            temp = task_list_head; // Start scan from the beginning of the main list
             while (temp != NULL) {
                 if (temp->task->priority == highest_priority) {
                     tasks_at_priority_level++;
 
                     // Check if this is the first time this task is being run
                     // We can check this by comparing its current burst to its original burst
-                    struct node *orig_node = g_original_tasks;
+                    struct node *orig_node = original_tasks_head;
                     int original_burst = 0;
                     while(orig_node) {
                         if (strcmp(orig_node->task->name, temp->task->name) == 0) {
@@ -126,7 +125,7 @@ void schedule() {
                         total_turnaround_time += current_time;
                         struct node *to_delete = temp;
                         temp = temp->next; // Move to next before deleting
-                        delete(&g_head, to_delete->task);
+                        delete(&task_list_head, to_delete->task);
                         continue; // Continue loop without advancing temp again
                     }
                 }
